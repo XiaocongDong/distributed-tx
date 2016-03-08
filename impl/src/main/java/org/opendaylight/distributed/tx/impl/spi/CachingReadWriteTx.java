@@ -93,7 +93,7 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                     @Override
                     public void onSuccess(@Nullable Object result) {
                         retFuture.set(null);
-                        LOG.info("async delete done and return !!!!");
+//                        LOG.info("async delete done and return !!!!");
                     }
 
                     @Override
@@ -150,7 +150,7 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                     @Override
                     public void onSuccess(@Nullable Object result) {
                         retFuture.set(null);
-                        LOG.info("async merge device merge done and return");
+//                        LOG.info("async merge device merge done and return");
                     }
 
                     @Override
@@ -207,7 +207,7 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                 final ListenableFuture asyncPutFuture = executorService.submit(new Callable() {
                     @Override
                     public Object call() throws Exception {
-                        LOG.info("asyncPut put obj {}", Integer.toHexString(System.identityHashCode(t)));
+//                        LOG.info("asyncPut put obj {}", Integer.toHexString(System.identityHashCode(t)));
                         delegate.put(logicalDatastoreType, instanceIdentifier, t);
                         return null;
                     }

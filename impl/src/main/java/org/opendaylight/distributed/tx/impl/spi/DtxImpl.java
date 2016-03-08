@@ -506,7 +506,7 @@ public class DtxImpl implements DTx {
         }
 
         public void releaseStatePerNode(){
-            LOG.info("release tx hdl");
+//            LOG.info("release tx hdl");
             this.rollbackTx.cancel();
         }
     }
