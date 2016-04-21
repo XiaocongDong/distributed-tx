@@ -530,6 +530,14 @@ public class DtxImpl implements DTx {
         return false;
     }
 
+    private void waitForAllTxsDone(){
+        for (DTXLogicalTXProviderType type : this.perNodeTransactionsbyLogicalType.keySet()) {
+            for (CachingReadWriteTx perNodeTx : this.perNodeTransactionsbyLogicalType.get(type).values()){
+                perNodeTx.waitForActiveOperationsDone();
+            }
+        }
+    }
+
     @Override
     public <T extends DataObject> CheckedFuture<Void, DTxException> mergeAndRollbackOnFailure(
             final LogicalDatastoreType logicalDatastoreType,
@@ -574,6 +582,7 @@ public class DtxImpl implements DTx {
                 Runnable runnable = new Runnable() {
                     @Override
                     public void run() {
+                        waitForAllTxsDone();
                         CheckedFuture<Void, DTxException.RollbackFailedException> rollExcept = rollback();
                         Futures.addCallback(rollExcept, new FutureCallback<Void>() {
                             @Override
@@ -629,6 +638,7 @@ public class DtxImpl implements DTx {
                 Runnable rolllbackRoutine = new Runnable() {
                     @Override
                     public void run() {
+                        waitForAllTxsDone();
                         CheckedFuture<Void, DTxException.RollbackFailedException> rollExcept = rollback();
 
                         Futures.addCallback(rollExcept, new FutureCallback<Void>() {
@@ -685,6 +695,7 @@ public class DtxImpl implements DTx {
                 Runnable runnable = new Runnable() {
                     @Override
                     public void run() {
+                        waitForAllTxsDone();
                         CheckedFuture<Void, DTxException.RollbackFailedException> rollExcept = rollback();
 
                         Futures.addCallback(rollExcept, new FutureCallback<Void>() {

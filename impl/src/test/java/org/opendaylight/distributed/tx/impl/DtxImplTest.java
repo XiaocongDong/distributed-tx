@@ -958,6 +958,87 @@ public class DtxImplTest{
             Assert.assertEquals("size of identifier's data is wrong", expectedDataSizeInIdentifier, internalDtxNetconfTestTx1.getTxDataSize(identifiers.get(i)));
         }
     }
+    /**
+     * simulate the case in which no data exist in n0 of netconf Node1
+     * use multithreads to write data to n0
+     * one of the operations fail, rollback succeed and no data exist in n0
+     */
+    @Test
+    public void testConcurrentWriteToSameNodeWithoutObjExRollbackSucceed(){
+        int numOfThreads = (int)(Math.random()*9) + 1;
+        threadPool = Executors.newFixedThreadPool(numOfThreads);
+        final int errorOccur = (int)(Math.random()*numOfThreads);
+        internalDtxNetconfTestTx1.setPutException(n0,true);
+        for (int i = 0; i < numOfThreads; i++){
+            final int finalI = i;
+            threadPool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    CheckedFuture<Void, DTxException> writeFuture;
+                    if (finalI == errorOccur){
+                        writeFuture = dtxImpl1.putAndRollbackOnFailure(DTXLogicalTXProviderType.NETCONF_TX_PROVIDER, LogicalDatastoreType.CONFIGURATION,
+                                n0, new TestClassNode(), netConfIid1);
+                    }else{
+                        writeFuture = dtxImpl1.mergeAndRollbackOnFailure(DTXLogicalTXProviderType.NETCONF_TX_PROVIDER, LogicalDatastoreType.CONFIGURATION,
+                                n0, new TestClassNode(), netConfIid1);
+                    }
+                    try{
+                        writeFuture.checkedGet();
+                    }catch (DTxException e){
+                        if (finalI != errorOccur)
+                            fail("get the unexpected exception");
+                    }
+                }
+            });
+        }
+        threadPool.shutdown();
+        while(!threadPool.isTerminated()){
+
+        }
+        int expectedDataSizeInIdentifier = 0;
+        Assert.assertEquals("The Size of data in tx is wrong", expectedDataSizeInIdentifier, internalDtxNetconfTestTx1.getTxDataSize(n0));
+    }
+    /**
+     * simulate the case data exist in n0 of netconf Node1
+     * use multithreads to write data to n0
+     * one of the operations fail, rollback succeed, original data back to n0
+     */
+    @Test
+    public void testConcurrentWriteToSameNodeWithObjExRollbackSucceed(){
+        int numOfThreads = (int)(Math.random()*9) + 1;
+        threadPool = Executors.newFixedThreadPool(numOfThreads);
+        final int errorOccur = (int)(Math.random()*numOfThreads);
+        internalDtxNetconfTestTx1.setMergeException(n0,true);
+        internalDtxNetconfTestTx1.createObjForIdentifier(n0);
+        for (int i = 0; i < numOfThreads; i++){
+            final int finalI = i;
+            threadPool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    CheckedFuture<Void, DTxException> writeFuture;
+                    if (finalI == errorOccur){
+                        writeFuture = dtxImpl1.mergeAndRollbackOnFailure(DTXLogicalTXProviderType.NETCONF_TX_PROVIDER, LogicalDatastoreType.CONFIGURATION,
+                                n0, new TestClassNode(), netConfIid1);
+                    }else{
+                        writeFuture = dtxImpl1.putAndRollbackOnFailure(DTXLogicalTXProviderType.NETCONF_TX_PROVIDER, LogicalDatastoreType.CONFIGURATION,
+                                n0, new TestClassNode(), netConfIid1);
+                    }
+                    try{
+                        writeFuture.checkedGet();
+                    }catch (DTxException e){
+                        if (finalI != errorOccur)
+                            fail("get the unexpected exception");
+                    }
+                }
+            });
+        }
+        threadPool.shutdown();
+        while(!threadPool.isTerminated()){
+
+        }
+        int expectedDataSizeInIdentifier = 1;
+        Assert.assertEquals("The Size of data in tx is wrong", expectedDataSizeInIdentifier, internalDtxNetconfTestTx1.getTxDataSize(n0));
+    }
 
     /**
      * test best effort put method
@@ -1129,7 +1210,7 @@ public class DtxImplTest{
     /**
      * put data into all the nodes in dtxImpl2
      * invoke rollback
-     * when rollback dataStore2 transaction, submit exception ocur
+     * when rollback dataStore2 transaction, submit exception occur
      * rollback fail
      */
     @Test
