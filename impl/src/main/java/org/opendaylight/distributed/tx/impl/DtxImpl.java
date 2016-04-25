@@ -231,6 +231,7 @@ public class DtxImpl implements DTx {
     }
 
     private CheckedFuture<Void, DTxException.RollbackFailedException> rollbackUponOperationFailure(){
+        waitForAllTxsDone();
         Rollback rollback = new RollbackImpl();
         Map<InstanceIdentifier<?>, CachingReadWriteTx> perNodeCache = new HashMap<>();
 
@@ -582,7 +583,6 @@ public class DtxImpl implements DTx {
                 Runnable runnable = new Runnable() {
                     @Override
                     public void run() {
-                        waitForAllTxsDone();
                         CheckedFuture<Void, DTxException.RollbackFailedException> rollExcept = rollback();
                         Futures.addCallback(rollExcept, new FutureCallback<Void>() {
                             @Override
@@ -638,7 +638,6 @@ public class DtxImpl implements DTx {
                 Runnable rolllbackRoutine = new Runnable() {
                     @Override
                     public void run() {
-                        waitForAllTxsDone();
                         CheckedFuture<Void, DTxException.RollbackFailedException> rollExcept = rollback();
 
                         Futures.addCallback(rollExcept, new FutureCallback<Void>() {
@@ -695,7 +694,6 @@ public class DtxImpl implements DTx {
                 Runnable runnable = new Runnable() {
                     @Override
                     public void run() {
-                        waitForAllTxsDone();
                         CheckedFuture<Void, DTxException.RollbackFailedException> rollExcept = rollback();
 
                         Futures.addCallback(rollExcept, new FutureCallback<Void>() {

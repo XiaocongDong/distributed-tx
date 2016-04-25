@@ -28,6 +28,7 @@ public class DTXTestTransaction implements ReadWriteTransaction {
     Map<InstanceIdentifier<?>, Boolean> mergeExceptionMap = new HashMap<>();
     Map<InstanceIdentifier<?>, Boolean> deleteExceptionMap = new HashMap<>();
     boolean submitException = false;
+    static int delayTime = 1;
 
     private Map<InstanceIdentifier<?>,ArrayList<DataObject>> txDataMap = new HashMap<>();
 
@@ -49,6 +50,9 @@ public class DTXTestTransaction implements ReadWriteTransaction {
     public void setSubmitException( boolean ept)
     {
         this.submitException = ept;
+    }
+    public static void setDelayTime(int dlTime){
+        delayTime = dlTime;
     }
 
     /**
@@ -87,7 +91,7 @@ public class DTXTestTransaction implements ReadWriteTransaction {
             @Override
             public void run() {
                 try {
-                    Thread.sleep(5);
+                    Thread.sleep(delayTime);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

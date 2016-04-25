@@ -11,6 +11,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -36,10 +37,10 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
     private final ReadWriteTransaction delegate;
     public final Deque<CachedData> cache = new ConcurrentLinkedDeque<>();
     private final ExecutorService executorPoolPerCache;
-    private volatile int numOfActiveOperations;
+    private AtomicInteger numOfActiveOperations;
 
     public CachingReadWriteTx(@Nonnull final ReadWriteTransaction delegate) {
-        this.numOfActiveOperations = 0;
+        this.numOfActiveOperations = new AtomicInteger(0);
         this.delegate = delegate;
         this.executorPoolPerCache = Executors.newCachedThreadPool();
     }
@@ -68,13 +69,17 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
 
     public CheckedFuture<Void, DTxException> asyncDelete(final LogicalDatastoreType logicalDatastoreType,
                                       final InstanceIdentifier<?> instanceIdentifier) {
-        numOfActiveOperations++;
-        @SuppressWarnings("unchecked")
-        final CheckedFuture<Optional<DataObject>, ReadFailedException> readFuture = delegate
-                .read(logicalDatastoreType, (InstanceIdentifier<DataObject>) instanceIdentifier);
+        increaseActiveOperation();
+
+        CheckedFuture<Optional<DataObject>, ReadFailedException> readFuture = null;
+        try {
+            readFuture = delegate.read(logicalDatastoreType, (InstanceIdentifier<DataObject>) instanceIdentifier);
+        }catch (Exception readException){
+            readFuture = Futures.immediateFailedCheckedFuture(
+                    new ReadFailedException("read exception in delete action", readException));
+        }
 
         final SettableFuture<Void> retFuture = SettableFuture.create();
-
         Futures.addCallback(readFuture, new FutureCallback<Optional<DataObject>>() {
             @Override public void onSuccess(final Optional<DataObject> result) {
 
@@ -94,14 +99,14 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                 Futures.addCallback(asyncDeleteFuture, new FutureCallback() {
                     @Override
                     public void onSuccess(@Nullable Object result) {
-                        numOfActiveOperations--;
+                        decreaseActiveOperation();
                         retFuture.set(null);
                         LOG.info("async delete done and return !!!!");
                     }
 
                     @Override
                     public void onFailure(Throwable t) {
-                        numOfActiveOperations--;
+                        decreaseActiveOperation();
                         LOG.info("async delete exception");
                         retFuture.setException(t);
                     }
@@ -109,7 +114,7 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
             }
 
             @Override public void onFailure(final Throwable t) {
-                numOfActiveOperations--;
+                decreaseActiveOperation();
                 retFuture.setException(new DTxException.ReadFailedException("failed to read from node in delete action", t));
             }
         });
@@ -131,12 +136,17 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
 
     public <T extends DataObject> CheckedFuture<Void, DTxException>asyncMerge(final LogicalDatastoreType logicalDatastoreType,
                                                        final InstanceIdentifier<T> instanceIdentifier, final T t) {
-        numOfActiveOperations++;
-        final CheckedFuture<Optional<T>, ReadFailedException> readFuture = delegate
-                .read(logicalDatastoreType, instanceIdentifier);
+        increaseActiveOperation();
+
+        CheckedFuture<Optional<T>, ReadFailedException> readFuture = null;
+        try {
+            readFuture = delegate.read(logicalDatastoreType, instanceIdentifier);
+        }catch (Exception readException){
+            readFuture = Futures.immediateFailedCheckedFuture(
+                    new ReadFailedException("read exception in merge action", readException));
+        }
 
         final SettableFuture<Void> retFuture = SettableFuture.create();
-
         Futures.addCallback(readFuture, new FutureCallback<Optional<T>>() {
             @Override public void onSuccess(final Optional<T> result) {
                 synchronized (this) {
@@ -155,7 +165,7 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                 Futures.addCallback(asyncMergeFuture, new FutureCallback() {
                     @Override
                     public void onSuccess(@Nullable Object result) {
-                        numOfActiveOperations--;
+                        decreaseActiveOperation();
                         retFuture.set(null);
                         LOG.info("async merge device merge done and return");
                     }
@@ -163,14 +173,14 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                     @Override
                     public void onFailure(Throwable t) {
                         LOG.info("async merge device exception");
-                        numOfActiveOperations--;
+                        decreaseActiveOperation();
                         retFuture.setException(t);
                     }
                 });
             }
 
             @Override public void onFailure(final Throwable t) {
-                numOfActiveOperations--;
+                decreaseActiveOperation();
                 retFuture.setException(new DTxException.ReadFailedException("failed to read from node in merge action", t));
             }
         });
@@ -200,12 +210,18 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
 
     public <T extends DataObject> CheckedFuture<Void, DTxException> asyncPut(final LogicalDatastoreType logicalDatastoreType,
                                                      final InstanceIdentifier<T> instanceIdentifier, final T t) {
-        numOfActiveOperations++;
-        final SettableFuture<Void> retFuture = SettableFuture.create();
+        increaseActiveOperation();
 
-        final CheckedFuture<Optional<T>, ReadFailedException> read = delegate
-                .read(logicalDatastoreType, instanceIdentifier);
-        Futures.addCallback(read, new FutureCallback<Optional<T>>() {
+        CheckedFuture<Optional<T>, ReadFailedException> readFuture = null;
+        try{
+            readFuture = delegate.read(logicalDatastoreType, instanceIdentifier);
+        }catch (Exception readException){
+            readFuture = Futures.immediateFailedCheckedFuture(
+                    new ReadFailedException("read exception in put action", readException));
+        }
+
+        final SettableFuture<Void> retFuture = SettableFuture.create();
+        Futures.addCallback(readFuture, new FutureCallback<Optional<T>>() {
 
             @Override
             public void onSuccess(final Optional<T> result) {
@@ -226,13 +242,13 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
                 Futures.addCallback(asyncPutFuture, new FutureCallback() {
                     @Override
                     public void onSuccess(@Nullable Object result) {
-                        numOfActiveOperations--;
+                        decreaseActiveOperation();
                         retFuture.set(null);
                     }
 
                     @Override
                     public void onFailure(Throwable t) {
-                        numOfActiveOperations--;
+                        decreaseActiveOperation();
                         retFuture.setException(t);
                     }
                 });
@@ -240,7 +256,7 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
 
             @Override
             public void onFailure(final Throwable t) {
-                numOfActiveOperations--;
+                decreaseActiveOperation();
                 retFuture.setException(new DTxException.ReadFailedException("failed to read from node in put action", t));
             }
         });
@@ -271,9 +287,17 @@ public class CachingReadWriteTx implements TxCache, DTXReadWriteTransaction, Clo
     }
 
     public void waitForActiveOperationsDone(){
-        while (numOfActiveOperations > 0){
-
+        while (numOfActiveOperations.get() > 0){
+              Thread.yield();
         }
+    }
+
+    private void decreaseActiveOperation(){
+        numOfActiveOperations.getAndDecrement();
+    }
+
+    synchronized private void increaseActiveOperation() {
+        numOfActiveOperations.getAndIncrement();
     }
 
     @Deprecated
